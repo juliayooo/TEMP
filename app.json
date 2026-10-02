@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "TEMP",
-    "slug": "TEMP",
+    "name": "Temp",
+    "slug": "temp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true
     },
@@ -20,6 +20,16 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-image",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Temp reads your photos’ dates and locations to map them by the temperature when they were taken.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
+    ]
   }
 }
