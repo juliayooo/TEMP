@@ -2,13 +2,26 @@ import { Image } from 'expo-image';
 import { requestPermissionsAsync } from 'expo-media-library';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Image as StaticImage,
+  Linking,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { formatTemp, tempColor } from './src/layout';
+import { COLORS, formatTemp, tempColor } from './src/layout';
 import { loadPhotos, MAX_PHOTOS, type PhotoPoint, type Progress } from './src/photos';
 import { RadialMap } from './src/RadialMap';
+import { RowsView } from './src/RowsView';
+import { Thermometer } from './src/Thermometer';
+
+const LANDING_LOGO = require('./assets/logo-landing.png');
+const HEADER_LOGO = require('./assets/logo-header.png');
 
 type Phase = 'intro' | 'denied' | 'loading' | 'done';
 
@@ -17,6 +30,10 @@ function Screen() {
   const [phase, setPhase] = useState<Phase>('intro');
   const [photos, setPhotos] = useState<PhotoPoint[]>([]);
   const [progress, setProgress] = useState<Progress>({ scanned: 0, noLocation: 0, noWeather: 0 });
+  const [placed, setPlaced] = useState(0);
+  const [view, setView] = useState<'map' | 'rows'>('map');
+  // The rows are built the first time they are opened, then kept alive.
+  const [rowsOpened, setRowsOpened] = useState(false);
   const [fahrenheit, setFahrenheit] = useState(false);
   const [selected, setSelected] = useState<PhotoPoint | null>(null);
   const cancelled = useRef(false);
@@ -41,91 +58,109 @@ function Screen() {
           setPhotos(next);
           setProgress(nextProgress);
         },
-        () => cancelled.current
+        () => cancelled.current,
+        setPlaced
       );
     } finally {
-      setPhase('done');
+      // Let the thermometer finish filling before the map appears.
+      setPlaced(MAX_PHOTOS);
+      setTimeout(() => setPhase('done'), 600);
     }
   }, []);
 
-  const sorted = useMemo(() => [...photos].sort((a, b) => b.temp - a.temp), [photos]);
-  const max = sorted[0]?.temp ?? 0;
-  const min = sorted[sorted.length - 1]?.temp ?? 0;
+  const [min, max] = useMemo(() => {
+    const temps = photos.map((p) => p.temp);
+    return [Math.min(...temps), Math.max(...temps)];
+  }, [photos]);
 
-  if (phase === 'intro' || phase === 'denied') {
+  if (phase !== 'done') {
     return (
-      <View style={[styles.root, styles.centred]}>
-        <Text style={styles.title}>Your photos, by temperature</Text>
-        <Text style={styles.body}>
+      <Pressable
+        style={[styles.root, styles.centred]}
+        disabled={phase === 'loading'}
+        onPress={phase === 'intro' ? start : () => Linking.openSettings()}>
+        <StaticImage source={LANDING_LOGO} style={styles.landingLogo} />
+        {/* Warm the cache so the header logo is there the moment the map appears. */}
+        <StaticImage source={HEADER_LOGO} style={styles.preload} />
+        <Thermometer progress={placed / MAX_PHOTOS} />
+        <Text style={styles.caption}>
           {phase === 'intro'
-            ? 'Every photo with a location is placed on a radial map: the hottest moments at the centre, the coldest at the edge.'
-            : 'Photo access was denied. Allow access to your photos in Settings to build the map.'}
+            ? 'Tap to allow photo access'
+            : phase === 'denied'
+              ? 'Photo access denied\nTap to open Settings'
+              : `Reading your photos\n${progress.scanned} checked · ${placed} placed`}
         </Text>
-        <Pressable
-          style={styles.button}
-          onPress={phase === 'intro' ? start : () => Linking.openSettings()}>
-          <Text style={styles.buttonText}>
-            {phase === 'intro' ? 'Allow photo access' : 'Open Settings'}
-          </Text>
-        </Pressable>
-        {phase === 'denied' && (
-          <Pressable onPress={start}>
-            <Text style={styles.link}>Try again</Text>
-          </Pressable>
-        )}
-      </View>
+        <StatusBar style="dark" />
+      </Pressable>
     );
   }
 
+  const status =
+    photos.length === 0
+      ? 'No photos with a location found'
+      : `${photos.length} photos` + (photos.length >= MAX_PHOTOS ? ' (newest)' : '');
+
   return (
     <View style={styles.root}>
-      {sorted.length > 0 ? (
-        <RadialMap photos={sorted} min={min} max={max} onSelect={setSelected} />
-      ) : (
-        <View style={styles.centred}>
-          {phase === 'loading' ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.body}>
-              No photos with location data were found, or the weather service could not be reached.
-            </Text>
-          )}
+      <View style={[styles.header, { paddingTop: insets.top }]}>
+        <StaticImage source={HEADER_LOGO} style={styles.headerLogo} fadeDuration={0} />
+        <View style={styles.nav}>
+          <Text style={styles.navItem}>Weather</Text>
+          <Text style={styles.navCount}>{status}</Text>
         </View>
-      )}
-
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
-        <View>
-          <Text style={styles.count}>{sorted.length} photos</Text>
-          <Text style={styles.status}>
-            {phase === 'loading'
-              ? `Scanning… ${progress.scanned} checked`
-              : `${progress.noLocation} without location` +
-                (progress.noWeather ? ` · ${progress.noWeather} without weather` : '') +
-                (sorted.length >= MAX_PHOTOS ? ` · newest ${MAX_PHOTOS} shown` : '')}
-          </Text>
-        </View>
-        <Pressable style={styles.unit} onPress={() => setFahrenheit((f) => !f)}>
-          <Text style={styles.unitText}>{fahrenheit ? '°F' : '°C'}</Text>
-        </Pressable>
       </View>
 
-      {sorted.length > 0 && (
-        <View style={[styles.legend, { paddingBottom: insets.bottom + 12 }]} pointerEvents="none">
-          <Text style={styles.legendText}>Edge {formatTemp(min, fahrenheit)}</Text>
-          <View style={styles.legendBar}>
-            {Array.from({ length: 24 }, (_, i) => (
-              <View key={i} style={{ flex: 1, backgroundColor: tempColor(i / 23) }} />
-            ))}
-          </View>
-          <Text style={styles.legendText}>Centre {formatTemp(max, fahrenheit)}</Text>
+      {/* Both views stay mounted so switching between them doesn't reload any photos. */}
+      <View style={view === 'map' ? styles.pane : styles.hidden}>
+        <RadialMap photos={photos} fahrenheit={fahrenheit} onSelect={setSelected} />
+      </View>
+      {rowsOpened && (
+        <View style={view === 'rows' ? styles.pane : styles.hidden}>
+          <RowsView
+            photos={photos}
+            fahrenheit={fahrenheit}
+            bottomInset={insets.bottom + 64}
+            onSelect={setSelected}
+          />
         </View>
       )}
+
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
+        <View style={styles.units}>
+          <Pressable hitSlop={12} onPress={() => setFahrenheit(true)}>
+            <Text style={[styles.unit, fahrenheit && styles.unitActive]}>F</Text>
+          </Pressable>
+          <View style={styles.unitDivider} />
+          <Pressable hitSlop={12} onPress={() => setFahrenheit(false)}>
+            <Text style={[styles.unit, !fahrenheit && styles.unitActive]}>C</Text>
+          </Pressable>
+        </View>
+        <View style={styles.units}>
+          <Pressable hitSlop={12} onPress={() => setView('map')}>
+            <Text style={[styles.unit, view === 'map' && styles.unitActive]}>MAP</Text>
+          </Pressable>
+          <View style={styles.unitDivider} />
+          <Pressable
+            hitSlop={12}
+            onPress={() => {
+              setRowsOpened(true);
+              setView('rows');
+            }}>
+            <Text style={[styles.unit, view === 'rows' && styles.unitActive]}>ROWS</Text>
+          </Pressable>
+        </View>
+      </View>
 
       <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => setSelected(null)}>
         <Pressable style={styles.backdrop} onPress={() => setSelected(null)}>
           {selected && (
             <>
-              <Image source={{ uri: selected.uri }} style={styles.preview} contentFit="contain" />
+              <Image
+                source={{ uri: selected.uri }}
+                style={styles.preview}
+                contentFit="contain"
+                priority="high"
+              />
               <Text
                 style={[
                   styles.detailTemp,
@@ -133,20 +168,19 @@ function Screen() {
                 ]}>
                 {formatTemp(selected.temp, fahrenheit)}
               </Text>
-              <Text style={styles.body}>
+              <Text style={styles.caption}>
                 {new Date(selected.time).toLocaleString(undefined, {
                   dateStyle: 'medium',
                   timeStyle: 'short',
                 })}
-              </Text>
-              <Text style={styles.status}>
+                {'\n'}
                 {selected.latitude.toFixed(3)}, {selected.longitude.toFixed(3)}
               </Text>
             </>
           )}
         </Pressable>
       </Modal>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
     </View>
   );
 }
@@ -162,54 +196,57 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0b0b10' },
-  centred: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 },
-  title: { color: '#fff', fontSize: 26, fontWeight: '700', textAlign: 'center' },
-  body: { color: '#c9c9d4', fontSize: 16, lineHeight: 22, textAlign: 'center' },
-  button: { backgroundColor: '#f79d3c', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 28 },
-  buttonText: { color: '#0b0b10', fontSize: 16, fontWeight: '700' },
-  link: { color: '#c9c9d4', fontSize: 15, textDecorationLine: 'underline' },
+  root: { flex: 1, backgroundColor: COLORS.background },
+  pane: { flex: 1 },
+  hidden: { display: 'none' },
+  centred: { alignItems: 'center', justifyContent: 'center', gap: 18 },
+  landingLogo: { width: 274, height: 122 },
+  caption: {
+    color: COLORS.text,
+    fontSize: 13,
+    lineHeight: 20,
+    minHeight: 40,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
   header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 20,
+    backgroundColor: COLORS.background,
+    paddingLeft: 13,
+    paddingRight: 32,
+    paddingBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  count: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  status: { color: '#9a9aa8', fontSize: 13, marginTop: 2 },
-  unit: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1d1d27',
     alignItems: 'center',
-    justifyContent: 'center',
+    zIndex: 1,
   },
-  unitText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  legend: {
+  headerLogo: { width: 182, height: 81 },
+  preload: { position: 'absolute', width: 1, height: 1, opacity: 0 },
+  nav: { alignItems: 'flex-end', gap: 8 },
+  navItem: { color: COLORS.text, fontSize: 13, letterSpacing: 0.3, textTransform: 'uppercase' },
+  footer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 20,
+    paddingHorizontal: 32,
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
   },
-  legendBar: { flex: 1, height: 8, borderRadius: 4, overflow: 'hidden', flexDirection: 'row' },
-  legendText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  units: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  unit: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  unitActive: { color: COLORS.active },
+  unitDivider: { width: 1, height: 20, backgroundColor: '#fff' },
+  navCount: { color: COLORS.text, fontSize: 11, letterSpacing: 0.3, opacity: 0.7, textTransform: 'uppercase' },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(5,5,8,0.94)',
+    backgroundColor: 'rgba(244,244,244,0.96)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    gap: 6,
+    gap: 8,
   },
   preview: { width: '100%', height: '60%', marginBottom: 12 },
-  detailTemp: { fontSize: 44, fontWeight: '800' },
+  detailTemp: { fontSize: 48, fontWeight: '800' },
 });

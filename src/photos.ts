@@ -7,6 +7,8 @@ export type PhotoPoint = {
   id: string;
   uri: string;
   time: number;
+  /** width / height */
+  aspect: number;
   latitude: number;
   longitude: number;
   /** °C */
@@ -46,11 +48,13 @@ async function mapPool<T>(items: T[], worker: (item: T) => Promise<void>) {
 
 /**
  * Walks the photo library newest-first, resolving each photo's location and the
- * temperature there when it was taken. Calls `onUpdate` after every page.
+ * temperature there when it was taken. Calls `onUpdate` after every page and
+ * `onPlaced` with the running count after every photo that makes it onto the map.
  */
 export async function loadPhotos(
   onUpdate: (photos: PhotoPoint[], progress: Progress) => void,
-  isCancelled: () => boolean
+  isCancelled: () => boolean,
+  onPlaced?: (count: number) => void
 ) {
   const cache = await readCache();
   const photos: PhotoPoint[] = [];
@@ -103,10 +107,12 @@ export async function loadPhotos(
           id: meta.id,
           uri,
           time,
+          aspect: meta.width && meta.height ? meta.width / meta.height : 1,
           temp: entry[0],
           latitude: entry[1],
           longitude: entry[2],
         });
+        onPlaced?.(photos.length);
       } catch {
         progress.noWeather++;
       }
