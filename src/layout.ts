@@ -1,13 +1,17 @@
 import type { PhotoPoint } from './photos';
 
 export const COLORS = {
-  background: '#F4F4F4',
-  hot: '#D4816F',
-  mid: '#A8939F',
-  cold: '#79A1C7',
-  fade: '#E5EDF4',
+  background: '#FFFFFF',
+  hot: '#FCA11D',
+  warm: '#F28A32',
+  mid: '#D67B4E',
+  cool: '#7059AF',
+  cold: '#675FC6',
+  fade: '#E8E9F4',
+  glow: '#FF892A',
+  blue: '#1538FF',
   text: '#888888',
-  active: '#967C70',
+  active: '#FCA11E',
 };
 
 /** Degrees Celsius between candidate rings. */
@@ -150,7 +154,9 @@ function mix(a: string, b: string, f: number) {
 /** Colour for a temperature normalised to 0 (coldest) .. 1 (hottest). */
 export function tempColor(t: number) {
   const x = Math.min(1, Math.max(0, t));
-  return x < 0.5 ? mix(COLORS.cold, COLORS.mid, x * 2) : mix(COLORS.mid, COLORS.hot, x * 2 - 1);
+  const scale = [COLORS.cold, COLORS.cool, COLORS.mid, COLORS.warm, COLORS.hot];
+  const i = Math.min(scale.length - 2, Math.floor(x * (scale.length - 1)));
+  return mix(scale[i], scale[i + 1], x * (scale.length - 1) - i);
 }
 
 export function formatTemp(celsius: number, fahrenheit: boolean) {

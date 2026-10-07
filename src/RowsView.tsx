@@ -1,93 +1,158 @@
 import { Image } from 'expo-image';
-import { useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { memo, useCallback, useMemo } from 'react';
+import { FlatList, type ListRenderItem, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { tempColor } from './layout';
+import { COLORS, formatTemp, tempColor } from './layout';
 import type { PhotoPoint } from './photos';
 
 const PHOTO_HEIGHT = 96;
-const LINE = 'rgba(255,255,255,0.7)';
+const ROW_PADDING = 12;
+const ROW_HEIGHT = PHOTO_HEIGHT + ROW_PADDING * 2;
 
 type Props = {
   photos: PhotoPoint[];
   fahrenheit: boolean;
-  /** Space to leave under the last row for the floating controls. */
-  bottomInset: number;
+  /** Space above the first row, for the status bar. */
+  topInset: number;
   onSelect: (photo: PhotoPoint) => void;
 };
 
-type Row = { degrees: number; color: string; photos: PhotoPoint[] };
+/** `top` and `bottom` are the row's edge colours, blended halfway into its neighbours. */
+type Row = { celsius: number; top: string; bottom: string; photos: PhotoPoint[] };
 
-/** One horizontally scrolling row of photos per whole degree, hottest row first. */
-export function RowsView({ photos, fahrenheit, bottomInset, onSelect }: Props) {
+const RowPhoto = memo(function RowPhoto({
+  photo,
+  onSelect,
+}: {
+  photo: PhotoPoint;
+  onSelect: (photo: PhotoPoint) => void;
+}) {
+  return (
+    <Pressable onPress={() => onSelect(photo)}>
+      <Image
+        source={{ uri: photo.uri }}
+        recyclingKey={photo.id}
+        cachePolicy="memory"
+        priority="low"
+        transition={150}
+        style={{
+          height: PHOTO_HEIGHT,
+          width: PHOTO_HEIGHT * Math.min(1.4, Math.max(0.7, photo.aspect)),
+        }}
+      />
+    </Pressable>
+  );
+});
+
+/** A row's photos, kept separate from its label so a unit change re-renders only the label. */
+const RowPhotos = memo(function RowPhotos({
+  photos,
+  onSelect,
+}: {
+  photos: PhotoPoint[];
+  onSelect: (photo: PhotoPoint) => void;
+}) {
+  const renderItem = useCallback<ListRenderItem<PhotoPoint>>(
+    ({ item }) => <RowPhoto photo={item} onSelect={onSelect} />,
+    [onSelect]
+  );
+  return (
+    <FlatList
+      horizontal
+      data={photos}
+      keyExtractor={(photo) => photo.id}
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.photos}
+      initialNumToRender={5}
+      renderItem={renderItem}
+    />
+  );
+});
+
+const RowItem = memo(function RowItem({
+  row,
+  fahrenheit,
+  onSelect,
+}: {
+  row: Row;
+  fahrenheit: boolean;
+  onSelect: (photo: PhotoPoint) => void;
+}) {
+  return (
+    <LinearGradient colors={[row.top, row.bottom]} style={styles.row}>
+      <View style={styles.labelColumn}>
+        <Text style={styles.label}>{formatTemp(row.celsius, fahrenheit)}</Text>
+      </View>
+      <RowPhotos photos={row.photos} onSelect={onSelect} />
+    </LinearGradient>
+  );
+});
+
+/**
+ * One horizontally scrolling row of photos per whole °C, hottest first, over
+ * one continuous gradient from orange down to purple. Rows are always grouped
+ * in °C so switching units only relabels them.
+ */
+export const RowsView = memo(function RowsView({ photos, fahrenheit, topInset, onSelect }: Props) {
   const rows = useMemo(() => {
     const byDegree = new Map<number, PhotoPoint[]>();
     for (const photo of photos) {
-      const degrees = Math.round(fahrenheit ? photo.temp * 1.8 + 32 : photo.temp);
-      const row = byDegree.get(degrees);
+      const celsius = Math.round(photo.temp);
+      const row = byDegree.get(celsius);
       if (row) row.push(photo);
-      else byDegree.set(degrees, [photo]);
+      else byDegree.set(celsius, [photo]);
     }
     const sorted = [...byDegree.keys()].sort((a, b) => b - a);
-    const span = sorted[0] - sorted[sorted.length - 1] || 1;
-    return sorted.map<Row>((degrees) => ({
-      degrees,
-      color: tempColor((degrees - sorted[sorted.length - 1]) / span),
+    const min = sorted[sorted.length - 1];
+    const span = sorted[0] - min || 1;
+    const t = sorted.map((celsius) => (celsius - min) / span);
+    return sorted.map<Row>((celsius, i) => ({
+      celsius,
+      top: tempColor(i === 0 ? t[i] : (t[i - 1] + t[i]) / 2),
+      bottom: tempColor(i === sorted.length - 1 ? t[i] : (t[i] + t[i + 1]) / 2),
       // Newest first within a row.
-      photos: byDegree.get(degrees)!.sort((a, b) => b.time - a.time),
+      photos: byDegree.get(celsius)!.sort((a, b) => b.time - a.time),
     }));
-  }, [photos, fahrenheit]);
+  }, [photos]);
+
+  const renderItem = useCallback<ListRenderItem<Row>>(
+    ({ item }) => <RowItem row={item} fahrenheit={fahrenheit} onSelect={onSelect} />,
+    [fahrenheit, onSelect]
+  );
+
+  const first = rows[0]?.top ?? COLORS.hot;
+  const last = rows[rows.length - 1]?.bottom ?? COLORS.cold;
 
   return (
-    <FlatList
-      style={styles.list}
-      data={rows}
-      keyExtractor={(row) => String(row.degrees)}
-      contentContainerStyle={{ paddingBottom: bottomInset }}
-      renderItem={({ item: row }) => (
-        <View style={[styles.row, { backgroundColor: row.color }]}>
-          <View style={styles.labelColumn}>
-            <Text style={styles.label}>{row.degrees}°</Text>
-            <Text style={styles.count}>{row.photos.length}</Text>
-          </View>
-          <FlatList
-            horizontal
-            data={row.photos}
-            keyExtractor={(photo) => photo.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.photos}
-            initialNumToRender={5}
-            renderItem={({ item: photo }) => (
-              <Pressable onPress={() => onSelect(photo)}>
-                <Image
-                  source={{ uri: photo.uri }}
-                  recyclingKey={photo.id}
-                  cachePolicy="memory"
-                  priority="low"
-                  style={{
-                    height: PHOTO_HEIGHT,
-                    width: PHOTO_HEIGHT * Math.min(1.4, Math.max(0.7, photo.aspect)),
-                  }}
-                />
-              </Pressable>
-            )}
-          />
-        </View>
-      )}
-    />
+    <View style={styles.root}>
+      {/* Shows when the list is pulled past either end, matching the end rows. */}
+      <LinearGradient
+        colors={[first, first, last, last]}
+        locations={[0, 0.5, 0.5, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <FlatList
+        data={rows}
+        keyExtractor={(row) => String(row.celsius)}
+        // Every row is the same height, so the list never has to measure them.
+        getItemLayout={(_, index) => ({
+          length: ROW_HEIGHT,
+          offset: topInset + ROW_HEIGHT * index,
+          index,
+        })}
+        extraData={fahrenheit}
+        ListHeaderComponent={<View style={{ height: topInset, backgroundColor: first }} />}
+        renderItem={renderItem}
+      />
+    </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
-  list: { flex: 1 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: LINE,
-  },
-  labelColumn: { width: 64, alignItems: 'center', gap: 2 },
-  label: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  count: { color: 'rgba(255,255,255,0.75)', fontSize: 11 },
-  photos: { gap: 6, paddingVertical: 12, paddingRight: 16 },
+  root: { flex: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', height: ROW_HEIGHT },
+  labelColumn: { width: 64, alignItems: 'center' },
+  label: { color: '#fff', fontSize: 18, fontWeight: '300' },
+  photos: { gap: 6, paddingVertical: ROW_PADDING, paddingRight: 16 },
 });

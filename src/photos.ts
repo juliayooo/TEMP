@@ -1,5 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Asset, AssetField, MediaType, Query } from 'expo-media-library';
+import {
+  Asset,
+  AssetField,
+  MediaType,
+  Query,
+  requestPermissionsAsync,
+} from 'expo-media-library';
 
 import { temperatureAt } from './weather';
 
@@ -44,6 +50,11 @@ async function mapPool<T>(items: T[], worker: (item: T) => Promise<void>) {
     while (next < items.length) await worker(items[next++]);
   };
   await Promise.all(Array.from({ length: CONCURRENCY }, run));
+}
+
+/** Asks for photo library access; true if granted. */
+export async function requestAccess() {
+  return (await requestPermissionsAsync()).granted;
 }
 
 /**
