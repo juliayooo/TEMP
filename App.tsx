@@ -5,6 +5,7 @@ import {
   Linking,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -25,8 +26,8 @@ import { RadialMap } from './src/RadialMap';
 import { RowsView } from './src/RowsView';
 import { Thermometer } from './src/Thermometer';
 
-// Two rows of toggles beside the logo, plus padding.
-const FOOTER_HEIGHT = 92;
+// Height of the floating controls (two rows of toggles beside the logo) plus padding.
+const FOOTER_HEIGHT = 100;
 
 type Phase = 'intro' | 'denied' | 'loading' | 'done';
 
@@ -115,13 +116,14 @@ function Screen() {
             photos={photos}
             fahrenheit={fahrenheit}
             topInset={insets.top}
+            bottomInset={insets.bottom + FOOTER_HEIGHT}
             onSelect={setSelected}
           />
         </View>
       )}
 
-      {/* Both views end above this band rather than running underneath it. */}
-      <View style={[styles.footer, { height: insets.bottom + FOOTER_HEIGHT, paddingBottom: insets.bottom + 16 }]}>
+      {/* The controls float over the map and rows; each view leaves room for them. */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 24 }]} pointerEvents="box-none">
         <View style={styles.toggles}>
           <View style={styles.units}>
             <Pressable hitSlop={12} onPress={() => setView('map')}>
@@ -154,12 +156,23 @@ function Screen() {
         <Pressable style={styles.backdrop} onPress={() => setSelected(null)}>
           {selected && (
             <>
-              <Image
-                source={{ uri: selected.uri }}
+              {/* Pinch to zoom, handled natively like the map. */}
+              <ScrollView
                 style={styles.preview}
-                contentFit="contain"
-                priority="high"
-              />
+                contentContainerStyle={styles.previewContent}
+                minimumZoomScale={1}
+                maximumZoomScale={5}
+                bouncesZoom
+                centerContent
+                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}>
+                <Image
+                  source={{ uri: selected.uri }}
+                  style={styles.previewImage}
+                  contentFit="contain"
+                  priority="high"
+                />
+              </ScrollView>
               <Text
                 style={[
                   styles.detailTemp,
@@ -210,17 +223,29 @@ const styles = StyleSheet.create({
   },
   empty: { position: 'absolute', left: 0, right: 0, zIndex: 2 },
   footer: {
-    backgroundColor: COLORS.cold,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingLeft: 32,
-    paddingRight: 12,
+    paddingRight: 24,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
   },
   toggles: { gap: 14, paddingBottom: 6 },
   units: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  unit: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  unitActive: { color: COLORS.active },
+  // The controls float over photos and every part of the gradient (including
+  // the orange centre), so the active option is solid white rather than orange,
+  // with a soft shadow baked into the text for contrast.
+  unit: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 13,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowRadius: 4,
+  },
+  unitActive: { color: '#fff' },
   unitDivider: { width: 1, height: 20, backgroundColor: '#fff' },
   backdrop: {
     flex: 1,
@@ -230,6 +255,8 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 8,
   },
-  preview: { width: '100%', height: '60%', marginBottom: 12 },
+  preview: { width: '100%', height: '60%', flexGrow: 0, marginBottom: 12 },
+  previewContent: { width: '100%', height: '100%' },
+  previewImage: { width: '100%', height: '100%' },
   detailTemp: { fontSize: 56, fontWeight: '200' },
 });

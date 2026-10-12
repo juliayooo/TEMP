@@ -219,11 +219,15 @@ export const RadialMap = memo(function RadialMap({ photos, fahrenheit, onSelect 
       setViewport({ width, height });
       if (timer.current) return;
       // First layout: centre on the hot middle now that the real size is known.
-      scroller.current?.scrollTo({
-        x: half * home - width / 2,
-        y: half * home - height / 2,
-        animated: false,
-      });
+      // Wait a frame so the scroll view has taken on its content size;
+      // scrolling before that is clamped to the top-left corner.
+      requestAnimationFrame(() =>
+        scroller.current?.scrollTo({
+          x: half * home - width / 2,
+          y: half * home - height / 2,
+          animated: false,
+        })
+      );
       timer.current = setTimeout(() => setReady(true), waiting.size ? READY_TIMEOUT_MS : 0);
     },
     [waiting, half, home]
@@ -239,6 +243,9 @@ export const RadialMap = memo(function RadialMap({ photos, fahrenheit, onSelect 
         minimumZoomScale={fit}
         maximumZoomScale={MAX_SCALE}
         centerContent
+        // A plain scroll view sizes its content to its own width and only
+        // scrolls vertically; fixing both dimensions lets it scroll both ways.
+        contentContainerStyle={{ width: size, height: size }}
         bouncesZoom
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}

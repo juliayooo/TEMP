@@ -15,6 +15,8 @@ type Props = {
   fahrenheit: boolean;
   /** Space above the first row, for the status bar. */
   topInset: number;
+  /** Space below the last row, so it can scroll clear of the floating controls. */
+  bottomInset: number;
   onSelect: (photo: PhotoPoint) => void;
 };
 
@@ -94,7 +96,13 @@ const RowItem = memo(function RowItem({
  * one continuous gradient from orange down to purple. Rows are always grouped
  * in °C so switching units only relabels them.
  */
-export const RowsView = memo(function RowsView({ photos, fahrenheit, topInset, onSelect }: Props) {
+export const RowsView = memo(function RowsView({
+  photos,
+  fahrenheit,
+  topInset,
+  bottomInset,
+  onSelect,
+}: Props) {
   const rows = useMemo(() => {
     const byDegree = new Map<number, PhotoPoint[]>();
     for (const photo of photos) {
@@ -143,6 +151,7 @@ export const RowsView = memo(function RowsView({ photos, fahrenheit, topInset, o
         })}
         extraData={fahrenheit}
         ListHeaderComponent={<View style={{ height: topInset, backgroundColor: first }} />}
+        ListFooterComponent={<View style={{ height: bottomInset, backgroundColor: last }} />}
         renderItem={renderItem}
       />
     </View>

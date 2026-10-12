@@ -45,8 +45,8 @@ export function Thermometer({ progress }: { progress: number }) {
   return (
     <View style={styles.root}>
       <Svg width={WIDTH} height={HEIGHT} viewBox={`${VIEW_X} ${VIEW_Y} ${WIDTH} ${HEIGHT}`}>
-        <Path d={SHADOW} stroke="#000" strokeOpacity={0.2} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-        <Path d={OUTLINE} stroke={COLORS.glow} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d={SHADOW} fill="none" stroke="#000" strokeOpacity={0.2} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d={OUTLINE} fill="#fff" stroke={COLORS.glow} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
         <Ellipse cx={194.5} cy={515} rx={9.5} ry={10} fill={COLORS.blue} />
       </Svg>
       <Animated.View style={[styles.liquid, liquid]} />

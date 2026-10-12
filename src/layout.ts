@@ -11,7 +11,6 @@ export const COLORS = {
   glow: '#FF892A',
   blue: '#1538FF',
   text: '#888888',
-  active: '#FCA11E',
 };
 
 /** Degrees Celsius between candidate rings. */
